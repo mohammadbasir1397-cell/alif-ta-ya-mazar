@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Vazirmatn', system-ui, sans-serif;
+  }
+  body {
+    @apply bg-white text-slate-800 antialiased;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4;
+  }
+  .aty-input {
+    @apply w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400 focus:bg-white transition;
+  }
+}
+
+.animate-image-fade {
+  animation: image-fade 500ms ease-out;
+}
+
+@keyframes image-fade {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full;
+}
