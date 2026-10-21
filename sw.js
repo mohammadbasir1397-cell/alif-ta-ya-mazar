@@ -1,9 +1,11 @@
 const BASE = '/alif-ta-ya-mazar/';
-const CACHE_NAME = 'alif-ta-ya-shell-v2';
-const APP_SHELL = [BASE, BASE + 'index.html', BASE + 'manifest.json', BASE + 'logo.png'];
+const CACHE_NAME = 'alif-ta-ya-shell-v3';
+const APP_SHELL = [BASE, BASE + 'index.html', BASE + 'manifest.json', BASE + 'logo.webp'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => undefined),
+  );
   self.skipWaiting();
 });
 
