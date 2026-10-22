@@ -29,6 +29,15 @@ export function buildWhatsAppLink(
   return `https://wa.me/${number}?text=${text}`;
 }
 
+/** Append Supabase Image Transform resize parameters to a storage URL.
+ *  Returns the original URL if it's not a Supabase storage URL. */
+export function thumbUrl(url: string | null | undefined, width: number, quality = 80): string {
+  if (!url) return '';
+  if (!url.includes('/storage/v1/object/public/')) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}width=${width}&quality=${quality}&resize=contain`;
+}
+
 /** Create a URL-friendly slug from a Persian/Dari string. */
 export function slugify(input: string): string {
   const base = input
