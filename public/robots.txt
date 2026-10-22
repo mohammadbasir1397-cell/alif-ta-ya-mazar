@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-panel
+
+Sitemap: https://mohammadbasir1397-cell.github.io/alif-ta-ya-mazar/sitemap.xml

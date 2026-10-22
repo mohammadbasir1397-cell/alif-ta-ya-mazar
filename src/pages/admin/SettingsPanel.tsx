@@ -13,7 +13,6 @@ export default function SettingsPanel({ settings, onUpdated }: SettingsPanelProp
   const [storeName, setStoreName] = useState(settings.store_name);
   const [whatsapp, setWhatsapp] = useState(settings.whatsapp_number || '');
   const [heroText, setHeroText] = useState(settings.hero_text || '');
-  const [adminPassword, setAdminPassword] = useState('');
   const [logoPreview, setLogoPreview] = useState<string | null>(settings.logo_url);
   const [heroImage, setHeroImage] = useState<string | null>(settings.hero_image_url);
   const [heroOverlay, setHeroOverlay] = useState(settings.hero_overlay);
@@ -72,12 +71,10 @@ export default function SettingsPanel({ settings, onUpdated }: SettingsPanelProp
       hero_overlay: heroOverlay,
       hero_text_position: heroPos,
     };
-    if (adminPassword.trim()) patch.admin_password = adminPassword.trim();
     const updated = await updateSettings(patch);
     setSaving(false);
     if (updated) {
       onUpdated(updated);
-      setAdminPassword('');
       setMsg('تنظیمات ذخیره شد.');
     } else {
       setMsg('خطا در ذخیره‌سازی.');
@@ -185,9 +182,6 @@ export default function SettingsPanel({ settings, onUpdated }: SettingsPanelProp
         </Field>
         <Field label="شماره واتساپ (با کد کشور، مثال: 93790000000)">
           <input type="text" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="93790000000" className="aty-input" dir="ltr" />
-        </Field>
-        <Field label="تغییر رمز مدیریت (اختیاری)">
-          <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="رمز جدید" className="aty-input" dir="ltr" />
         </Field>
         <button
           onClick={save}

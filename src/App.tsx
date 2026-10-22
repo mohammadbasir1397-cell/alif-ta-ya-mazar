@@ -1,116 +1,81 @@
-import React, { memo, useEffect, useMemo, useState, useTransition, Suspense } from 'react';
+import { useEffect, useState } from 'react';
+import type { Category, Settings } from '@/lib/types';
+import { fetchSettings, fetchCategories } from '@/lib/api';
+import { startAnalyticsTracking } from '@/lib/analytics';
+import { useRouter, matchPath } from '@/lib/router';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
+import Homepage from '@/pages/Homepage';
+import CategoryPage from '@/pages/CategoryPage';
+import SearchPage from '@/pages/SearchPage';
+import ProductPage from '@/pages/ProductPage';
+import AdminPage from '@/pages/admin/AdminPage';
 
-// ۱. بهینه‌سازی کارت محصول و اصلاح خودکار مسیر عکس‌ها برای لود صحیح در موبایل و گیت‌هاب پیجز
-const ProductCard = memo(function ProductCard({ product }: { product: any }) {
-  const imageUrl = product.image && product.image.startsWith('/') 
-    ? `./${product.image.slice(1)}` 
-    : product.image;
+function App() {
+  const { route, navigate } = useRouter();
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [searchValue, setSearchValue] = useState('');
 
-  return (
-    <article className="product-card">
-      <img
-        src={imageUrl} 
-        alt={product.name}
-        loading="lazy"         // بارگذاری تنبل برای محصولات پایین صفحه
-        decoding="async"       // پردازش تصویر در پس‌زمینه بدون کند کردن اسکرول مرورگر
-        width={400}
-        height={400}
-      />
-      <h3>{product.name}</h3>
-      <p>{product.price}</p>
-    </article>
-  );
-});
-
-function HomePage({ products }: { products: any[] }) {
-  // مموایز کردن ۲۰ محصول اول برای جلوگیری از تکرار پردازش سنگین آرایه‌ها
-  const visibleProducts = useMemo(
-    () => products.slice(0, 20),
-    [products]
-  );
-
-  return (
-    <section className="product-grid">
-      {visibleProducts.map((product) => (
-        <ProductCard key={product.id} product={product} />
-      ))}
-    </section>
-  );
-}
-
-export default function App() {
-  // ۲. ترفند سرعت بالا: لود آنی تنظیمات سایت از کش مرورگر برای حذف سفید شدن صفحه در لودهای بعدی
-  const [settings, setSettings] = useState<any>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('app_settings');
-      return saved ? JSON.parse(saved) : null;
-    }
-    return null;
-  });
-  
-  const [categories, setCategories] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  
-  // استفاده از قابلیت Concurrent در ری‌اکت ۱۸ برای روان‌تر شدن تغییرات استیت سایت
-  const [isPending, startTransition] = useTransition();
+  useEffect(() => startAnalyticsTracking(), []);
 
   useEffect(() => {
     let active = true;
+    (async () => {
+      const [s, c] = await Promise.all([fetchSettings(), fetchCategories()]);
+      if (!active) return;
+      setSettings(s);
+      setCategories(c);
+    })();
+    return () => { active = false; };
+  }, []);
 
-    async function loadData() {
-      try {
-        // دریافت تنظیمات اولیه سایت در صورتی که در کش نباشد
-        if (!settings) {
-          const settingsResult = await fetchSettings();
-          if (active) {
-            setSettings(settingsResult);
-            localStorage.setItem('app_settings', JSON.stringify(settingsResult));
-          }
-        }
+  useEffect(() => {
+    const searchMatch = matchPath('/search', route.path);
+    if (searchMatch) {
+      const q = decodeURIComponent(route.path.split('?q=')[1] || '');
+      setSearchValue(q);
+    }
+  }, [route.path]);
 
-        // دریافت مستقل و غیرمسدودکننده (Non-blocking) دسته‌بندی‌ها
-        if (typeof fetchCategories === 'function') {
-          fetchCategories().then((categoriesResult) => {
-            if (active) setCategories(categoriesResult);
-          });
-        }
+  const path = route.path.split('?')[0];
+  const isAdmin = path === '/admin' || path === '/admin-panel';
 
-        // دریافت مستقل محصولات فروشگاه و اعمال با لودر هوشمند برای جلوگیری از فریز شدن UI
-        if (typeof fetchProducts === 'function') {
-          fetchProducts().then((productsResult) => {
-            if (active) {
-              startTransition(() => {
-                setProducts(productsResult);
-              });
-            }
-          });
-        }
+  const renderPage = () => {
+    if (isAdmin) return <AdminPage settings={settings} navigate={navigate} initialTab={path === '/admin-panel' ? 'analytics' : undefined} />;
 
-      } catch (error) {
-        console.error("خطا در دریافت اطلاعات سایت:", error);
-      }
+    const catMatch = matchPath('/category/:slug', path);
+    if (catMatch) return <CategoryPage slug={catMatch.slug} categories={categories} settings={settings} navigate={navigate} />;
+
+    if (path === '/search') {
+      const q = decodeURIComponent(route.path.split('?q=')[1] || '');
+      return <SearchPage query={q} settings={settings} navigate={navigate} />;
     }
 
-    loadData();
+    const prodMatch = matchPath('/product/:id', path);
+    if (prodMatch) return <ProductPage id={prodMatch.id} settings={settings} navigate={navigate} />;
 
-    return () => {
-      active = false;
-    };
-  }, [settings]);
+    return <Homepage categories={categories} settings={settings} navigate={navigate} />;
+  };
 
-  // نمایش اسکلتون موقت تا زمانی که ساختار و منوی اصلی سایت لود شود
-  if (!settings) {
-    return <div className="app-shell-placeholder">در حال بارگذاری سایت...</div>;
+  if (isAdmin) {
+    return <>{renderPage()}</>;
   }
 
   return (
-    <div className={`app-container ${isPending ? 'app-loading' : ''}`}>
-      <Header settings={settings} categories={categories} />
-      
-      {/* مدیریت هوشمند وضعیت بارگذاری لیست محصولات */}
-      <Suspense fallback={<div className="loading-spinner">در حال دریافت محصولات...</div>}>
-        <HomePage products={products} />
-      </Suspense>
+    <div className="min-h-screen flex flex-col bg-white">
+      <Header
+        settings={settings}
+        categories={categories}
+        onSearch={setSearchValue}
+        searchValue={searchValue}
+        navigate={navigate}
+        routePath={path}
+      />
+      <main className="flex-1">{renderPage()}</main>
+      <Footer settings={settings} navigate={navigate} />
     </div>
   );
 }
+
+export default App;
