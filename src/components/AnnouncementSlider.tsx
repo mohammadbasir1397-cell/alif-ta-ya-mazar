@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Announcement, AnnouncementSettings, FitMode, ImagePosition } from '@/lib/types';
+import { thumbUrl } from '@/lib/utils';
 
 interface AnnouncementSliderProps {
   announcements: Announcement[];
