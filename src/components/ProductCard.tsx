@@ -1,7 +1,7 @@
 import { MessageCircle, Tag } from 'lucide-react';
 import type { ProductWithImages } from '@/lib/types';
 import type { Settings } from '@/lib/types';
-import { formatAFN, buildWhatsAppLink, thumbUrl } from '@/lib/utils';
+import { formatAFN, buildWhatsAppLink } from '@/lib/utils';
 
 interface ProductCardProps {
   product: ProductWithImages;
@@ -22,11 +22,9 @@ export default function ProductCard({ product, settings, navigate }: ProductCard
       <button onClick={() => navigate(`/product/${product.id}`)} className="relative block bg-slate-50 aspect-square overflow-hidden">
         {cover ? (
           <img
-            src={thumbUrl(cover, 400, 75)}
+            src={cover}
             alt={product.name}
             loading="lazy"
-            width={400}
-            height={400}
             className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (

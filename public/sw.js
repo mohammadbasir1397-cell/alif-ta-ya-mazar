@@ -1,5 +1,5 @@
 const BASE = '/alif-ta-ya-mazar/';
-const CACHE_NAME = 'alif-ta-ya-shell-v4';
+const CACHE_NAME = 'alif-ta-ya-shell-v3';
 const APP_SHELL = [BASE, BASE + 'index.html', BASE + 'manifest.json', BASE + 'logo.webp'];
 
 self.addEventListener('install', (event) => {
@@ -19,11 +19,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
-
-  // Only handle navigation requests (HTML pages) — let the browser cache static assets normally
-  if (event.request.mode !== 'navigate') return;
+  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
 
   event.respondWith(
     fetch(event.request)
