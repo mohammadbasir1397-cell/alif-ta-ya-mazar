@@ -30,6 +30,7 @@ function App() {
     return () => { active = false; };
   }, []);
 
+  // Sync search box with route when on search page
   useEffect(() => {
     const searchMatch = matchPath('/search', route.path);
     if (searchMatch) {

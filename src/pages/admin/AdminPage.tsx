@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { LogOut, Box, FolderTree, Settings, Home, Megaphone, Flame, BarChart3 } from 'lucide-react';
 import type { Category, Product, Settings as SettingsType } from '@/lib/types';
 import { fetchCategories, fetchProducts } from '@/lib/api';
-import { supabase } from '@/lib/supabase';
 import AdminGate from './AdminGate';
 import ProductsPanel from './ProductsPanel';
 import CategoriesPanel from './CategoriesPanel';
@@ -20,8 +19,9 @@ interface AdminPageProps {
 type Tab = 'analytics' | 'products' | 'categories' | 'bestsellers' | 'announcements' | 'settings';
 
 export default function AdminPage({ settings, navigate, initialTab }: AdminPageProps) {
-  const [authed, setAuthed] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [authed, setAuthed] = useState(() => sessionStorage.getItem('aty_admin_ok') === '1');
+  const [adminPassword, setAdminPassword] = useState<string | null>(null);
+  const [adminEmail, setAdminEmail] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(initialTab || 'products');
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -29,17 +29,6 @@ export default function AdminPage({ settings, navigate, initialTab }: AdminPageP
   const [currentSettings, setCurrentSettings] = useState(settings);
 
   useEffect(() => { setCurrentSettings(settings); }, [settings]);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAuthed(!!session);
-      setCheckingAuth(false);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthed(!!session);
-    });
-    return () => { listener.subscription.unsubscribe(); };
-  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -53,15 +42,11 @@ export default function AdminPage({ settings, navigate, initialTab }: AdminPageP
     if (authed) loadData();
   }, [authed]);
 
-  if (checkingAuth) {
-    return <div className="container-page py-16 text-center text-slate-500">در حال بررسی...</div>;
-  }
-
-  if (!authed) return <AdminGate onSuccess={() => setAuthed(true)} />;
+  if (!authed) return <AdminGate settings={settings} onSuccess={(password, email) => { setAdminPassword(password); setAdminEmail(email); setAuthed(true); }} />;
   if (!currentSettings) return <div className="container-page py-16 text-center text-slate-500">تنظیمات بارگذاری نشد.</div>;
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const logout = () => {
+    sessionStorage.removeItem('aty_admin_ok');
     setAuthed(false);
   };
 
@@ -112,7 +97,7 @@ export default function AdminPage({ settings, navigate, initialTab }: AdminPageP
           <p className="text-sm text-slate-500 text-center py-12">در حال بارگذاری...</p>
         ) : (
           <>
-            {tab === 'analytics' && <AnalyticsPanel />}
+            {tab === 'analytics' && <AnalyticsPanel adminPassword={adminPassword} adminEmail={adminEmail} />}
             {tab === 'products' && <ProductsPanel categories={categories} products={products} onChanged={loadData} />}
             {tab === 'categories' && <CategoriesPanel categories={categories} onChanged={loadData} />}
             {tab === 'bestsellers' && <BestsellersPanel />}

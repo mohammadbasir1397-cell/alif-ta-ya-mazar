@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MessageCircle, ChevronLeft, Tag, CheckCircle2, XCircle } from 'lucide-react';
 import type { ProductWithImages, Settings } from '@/lib/types';
 import { fetchProductById } from '@/lib/api';
-import { formatAFN, buildWhatsAppLink, thumbUrl } from '@/lib/utils';
+import { formatAFN, buildWhatsAppLink } from '@/lib/utils';
 import Spinner from '@/components/Spinner';
 
 interface ProductPageProps {
@@ -30,8 +30,13 @@ export default function ProductPage({ id, settings, navigate }: ProductPageProps
   }, [id]);
 
   useEffect(() => {
-    setActiveImage(0);
-  }, [id]);
+    const count = product?.product_images?.length ?? 0;
+    if (count <= 1) return;
+    const timer = setInterval(() => {
+      setActiveImage((current) => (current + 1) % count);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [product]);
 
   if (loading) return <Spinner label="در حال بارگذاری محصول..." />;
 
@@ -71,7 +76,7 @@ export default function ProductPage({ id, settings, navigate }: ProductPageProps
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative order-1 flex-1 rounded-xl border border-slate-200 bg-slate-50 aspect-square flex items-center justify-center overflow-hidden">
             {cover ? (
-              <img key={cover} src={cover} alt={product.name} width={600} height={600} className="h-full w-full object-contain animate-image-fade" />
+              <img key={cover} src={cover} alt={product.name} className="h-full w-full object-contain animate-image-fade" />
             ) : (
               <Tag size={56} className="text-slate-300" />
             )}
@@ -105,7 +110,7 @@ export default function ProductPage({ id, settings, navigate }: ProductPageProps
                   }`}
                   aria-label={`نمایش تصویر ${i + 1}`}
                 >
-                  <img src={thumbUrl(img.image_url, 160, 70)} alt="" loading="lazy" width={80} height={80} className="h-full w-full object-contain" />
+                  <img src={img.image_url} alt="" loading="lazy" className="h-full w-full object-contain" />
                 </button>
               ))}
             </div>

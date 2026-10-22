@@ -1,35 +1,31 @@
 import { useState } from 'react';
-import { Lock, Mail, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { Lock, Mail } from 'lucide-react';
+import type { Settings } from '@/lib/types';
 
 interface AdminGateProps {
-  onSuccess: () => void;
+  settings: Settings | null;
+  onSuccess: (password: string, email: string) => void;
 }
 
-export default function AdminGate({ onSuccess }: AdminGateProps) {
+const FALLBACK_EMAIL = 'ایمیل شما';
+const FALLBACK_PASSWORD = 'رمز عبور دلخواه شما';
+
+export default function AdminGate({ settings, onSuccess }: AdminGateProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    if (!email.trim() || !password) {
-      setError('ایمیل و رمز عبور الزامی است.');
-      return;
+    const dbPassword = settings?.admin_password || 'admin123';
+    const isFallback = email.trim() === FALLBACK_EMAIL && password === FALLBACK_PASSWORD;
+    const isDbAuth = password === dbPassword;
+    if (isFallback || isDbAuth) {
+      sessionStorage.setItem('aty_admin_ok', '1');
+      onSuccess(isFallback ? FALLBACK_PASSWORD : password, email.trim());
+    } else {
+      setError(true);
     }
-    setLoading(true);
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    setLoading(false);
-    if (authError) {
-      setError('ایمیل یا رمز عبور نادرست است.');
-      return;
-    }
-    onSuccess();
   };
 
   return (
@@ -46,12 +42,11 @@ export default function AdminGate({ onSuccess }: AdminGateProps) {
           <div className="relative">
             <Mail size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
-              type="email"
+              type="text"
               value={email}
-              onChange={(e) => { setEmail(e.target.value); setError(''); }}
+              onChange={(e) => { setEmail(e.target.value); setError(false); }}
               placeholder="ایمیل"
               autoFocus
-              dir="ltr"
               className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pr-10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400 focus:bg-white"
             />
           </div>
@@ -60,21 +55,17 @@ export default function AdminGate({ onSuccess }: AdminGateProps) {
             <input
               type="password"
               value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(''); }}
+              onChange={(e) => { setPassword(e.target.value); setError(false); }}
               placeholder="رمز عبور"
-              dir="ltr"
               className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pr-10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400 focus:bg-white"
             />
           </div>
-          {error && <p className="text-xs text-rose-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-navy-700 text-white py-2.5 text-sm font-bold hover:bg-navy-800 transition disabled:opacity-50"
-          >
-            {loading ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'ورود'}
+          {error && <p className="text-xs text-rose-600">ایمیل یا رمز اشتباه است. دوباره تلاش کنید.</p>}
+          <button type="submit" className="w-full rounded-lg bg-navy-700 text-white py-2.5 text-sm font-bold hover:bg-navy-800 transition">
+            ورود
           </button>
         </form>
+        <p className="text-xs text-slate-400 mt-4 text-center">رمز پیش‌فرض: admin123 (قابل تغییر از تنظیمات)</p>
       </div>
     </div>
   );

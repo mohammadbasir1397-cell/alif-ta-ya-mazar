@@ -43,6 +43,7 @@ export interface Settings {
   logo_url: string | null;
   store_name: string;
   whatsapp_number: string | null;
+  admin_password: string;
   hero_text: string | null;
   hero_image_url: string | null;
   hero_overlay: number;

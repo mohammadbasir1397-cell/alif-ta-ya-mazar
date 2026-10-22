@@ -3,6 +3,11 @@ import { Activity, Download, Users, ShoppingBag, RefreshCw } from 'lucide-react'
 import { fetchAnalyticsStats } from '@/lib/api';
 import type { AnalyticsStats } from '@/lib/types';
 
+interface AnalyticsPanelProps {
+  adminPassword: string | null;
+  adminEmail: string | null;
+}
+
 const cards = [
   { key: 'active_visitors', label: 'بازدیدکنندگان فعال', icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50' },
   { key: 'registered_customers', label: 'مشتریان ثبت‌نام‌شده', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -10,30 +15,59 @@ const cards = [
   { key: 'pwa_installs', label: 'نصب موفق اپلیکیشن', icon: Download, color: 'text-navy-600', bg: 'bg-navy-50' },
 ] as const;
 
-export default function AnalyticsPanel() {
+export default function AnalyticsPanel({ adminPassword, adminEmail }: AnalyticsPanelProps) {
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
+  const [password, setPassword] = useState(adminPassword || '');
+  const [email, setEmail] = useState(adminEmail || '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const loadStats = useCallback(async () => {
+    if (!password) {
+      setError('برای مشاهده آمار، رمز مدیریت را وارد کنید.');
+      return;
+    }
     setLoading(true);
     setError('');
-    const result = await fetchAnalyticsStats();
+    const result = await fetchAnalyticsStats(password, email);
     setLoading(false);
     if (!result) {
       setStats(null);
-      setError('آمار فعلاً در دسترس نیست. لطفاً دوباره تلاش کنید.');
+      setError('رمز مدیریت نادرست است یا آمار فعلاً در دسترس نیست.');
       return;
     }
     setStats(result);
-  }, []);
+  }, [password, email]);
 
   useEffect(() => {
-    loadStats();
-  }, [loadStats]);
+    if (adminPassword) loadStats();
+  }, [adminPassword, loadStats]);
 
   return (
     <section className="space-y-5">
+      {!adminPassword && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <label className="mb-2 block text-sm font-semibold text-amber-900">ایمیل و رمز مدیریت برای مشاهده آمار</label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="ایمیل"
+              className="aty-input flex-1 bg-white"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="رمز مدیریت"
+              className="aty-input flex-1 bg-white"
+            />
+            <button onClick={loadStats} className="rounded-lg bg-navy-700 px-4 py-2 text-sm font-bold text-white hover:bg-navy-800">نمایش آمار</button>
+          </div>
+        </div>
+      )}
+
       {error && <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
 
       {stats && (
