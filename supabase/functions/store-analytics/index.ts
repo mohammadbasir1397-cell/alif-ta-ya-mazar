@@ -47,21 +47,22 @@ Deno.serve(async (request: Request) => {
     }
 
     if (action === "stats") {
-      const password = typeof payload?.password === "string" ? payload.password : "";
-      const email = typeof payload?.email === "string" ? payload.email.trim() : "";
-      const FALLBACK_EMAIL = "ایمیل شما";
-      const FALLBACK_PASSWORD = "رمز عبور دلخواه شما";
-      const isFallback = email === FALLBACK_EMAIL && password === FALLBACK_PASSWORD;
-      let isAuthorized = isFallback;
-      if (!isAuthorized) {
-        const { data: settings, error: settingsError } = await supabase
-          .from("settings")
-          .select("admin_password")
-          .eq("id", 1)
-          .maybeSingle();
-        if (!settingsError && settings && password === settings.admin_password) isAuthorized = true;
-      }
-      if (!isAuthorized) return response({ error: "Unauthorized" }, 401);
+      // Only a signed-in admin account may read stats.
+      const authHeader = request.headers.get("Authorization") ?? "";
+      const token = authHeader.replace(/^Bearer\s+/i, "");
+      if (!token) return response({ error: "Unauthorized" }, 401);
+
+      const authClient = createClient(supabaseUrl, serviceRoleKey);
+      const { data: userData } = await authClient.auth.getUser(token);
+      const userId = userData?.user?.id;
+      if (!userId) return response({ error: "Unauthorized" }, 401);
+
+      const { data: isAdminRow } = await supabase
+        .from("admin_users")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!isAdminRow) return response({ error: "Forbidden" }, 403);
 
       const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const [{ count: activeVisitors, error: visitorError }, { count: pwaInstalls, error: installError }] = await Promise.all([

@@ -3,11 +3,15 @@ import type { AnalyticsStats, Announcement, AnnouncementSettings, Category, Prod
 
 const analyticsFunctionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/store-analytics`;
 
-async function postAnalytics(payload: Record<string, string>): Promise<Record<string, unknown> | null> {
+async function postAnalytics(payload: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(analyticsFunctionUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+      headers,
       body: JSON.stringify(payload),
     });
     if (!response.ok) return null;
@@ -26,13 +30,89 @@ export async function trackPwaInstallation(installationId: string): Promise<void
   await postAnalytics({ action: 'pwa_install', installation_id: installationId });
 }
 
-export async function fetchAnalyticsStats(password: string, email?: string): Promise<AnalyticsStats | null> {
-  const data = await postAnalytics({ action: 'stats', password, ...(email ? { email } : {}) });
+export async function fetchAnalyticsStats(): Promise<AnalyticsStats | null> {
+  const data = await postAnalytics({ action: 'stats' });
   if (!data || typeof data.active_visitors !== 'number' || typeof data.pwa_installs !== 'number' || typeof data.registered_customers !== 'number' || typeof data.orders !== 'number') return null;
   return data as unknown as AnalyticsStats;
 }
 
+// ── Auth ──
+
+export async function getBootstrapEmail(): Promise<string | null> {
+  const { data } = await supabase
+    .from('admin_users')
+    .select('email')
+    .limit(1)
+    .maybeSingle();
+  return (data as { email: string } | null)?.email ?? null;
+}
+
+export async function signInAdmin(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.user) return { ok: false, error: error?.message || 'ورود ناموفق بود.' };
+  const { data: adminRow } = await supabase
+    .from('admin_users')
+    .select('user_id')
+    .eq('user_id', data.user.id)
+    .maybeSingle();
+  if (!adminRow) {
+    await supabase.auth.signOut();
+    return { ok: false, error: 'این حساب دسترسی مدیریتی ندارد.' };
+  }
+  return { ok: true };
+}
+
+export async function signOutAdmin(): Promise<void> {
+  await supabase.auth.signOut();
+}
+
+export async function currentAdminEmail(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.email ?? null;
+}
+
+/**
+ * First-run bootstrap: if no admin account exists at all, the first person to
+ * create one becomes the admin. Once admin_users has a row, this is denied.
+ */
+export async function bootstrapAdmin(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  const { data: existing } = await supabase
+    .from('admin_users')
+    .select('user_id')
+    .limit(1)
+    .maybeSingle();
+  if (existing) return { ok: false, error: 'یک حساب مدیریت از قبل وجود دارد.' };
+
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error || !data.user) return { ok: false, error: error?.message || 'ایجاد حساب ناموفق بود.' };
+
+  const { error: insertError } = await supabase
+    .from('admin_users')
+    .insert({ user_id: data.user.id, email: email.trim().toLowerCase() });
+  if (insertError) {
+    await supabase.auth.signOut();
+    return { ok: false, error: 'ثبت حساب مدیریتی ناموفق بود.' };
+  }
+  return { ok: true };
+}
+
+export async function changeAdminPassword(newPassword: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+// ── Settings ──
+
 export async function fetchSettings(): Promise<Settings | null> {
+  // The secure `settings` table is admin-only; the app reads the public view.
+  // Admin fields (admin_password) are excluded; admin panel edits go through
+  // the settings table directly below.
+  const { data } = await supabase.from('public_settings').select('*').eq('id', 1).maybeSingle();
+  return data as Settings | null;
+}
+
+export async function fetchPrivateSettings(): Promise<Settings | null> {
+  // Admin-only: returns the full settings row including sensitive fields.
   const { data } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle();
   return data as Settings | null;
 }
@@ -43,6 +123,8 @@ export async function updateSettings(
   const { data } = await supabase.from('settings').update(patch).eq('id', 1).select().maybeSingle();
   return data as Settings | null;
 }
+
+// ── Categories ──
 
 export async function fetchCategories(): Promise<Category[]> {
   const { data } = await supabase.from('categories').select('*').order('sort_order', { ascending: true });
@@ -63,6 +145,8 @@ export async function deleteCategory(id: string): Promise<boolean> {
   const { error } = await supabase.from('categories').delete().eq('id', id);
   return !error;
 }
+
+// ── Products ──
 
 export async function fetchProducts(filters?: {
   categoryId?: string;
