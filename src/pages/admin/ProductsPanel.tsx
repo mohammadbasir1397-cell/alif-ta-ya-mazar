@@ -1,19 +1,19 @@
 import { useState } from 'react';
 import { Plus, Trash2, Pencil, Loader2, X, Upload, Tag, Eye, Check } from 'lucide-react';
-import type { Category, Product, ProductImage } from '@/lib/types';
-import { createProduct, updateProduct, deleteProduct, addProductImage, deleteProductImage, uploadImage } from '@/lib/api';
+import type { Category, Product, ProductImage, ProductWithImages } from '@/lib/types';
+import { createProduct, updateProduct, deleteProduct, addProductImage, deleteProductImage, uploadImage, fetchProductById } from '@/lib/api';
 import { STORAGE_BUCKETS } from '@/lib/supabase';
 import { formatAFN } from '@/lib/utils';
 import { ConfirmDialog } from './CategoriesPanel';
 
 interface ProductsPanelProps {
   categories: Category[];
-  products: Product[];
+  products: ProductWithImages[];
   onChanged: () => void;
 }
 
 export default function ProductsPanel({ categories, products, onChanged }: ProductsPanelProps) {
-  const [editing, setEditing] = useState<Product | null>(null);
+  const [editing, setEditing] = useState<ProductWithImages | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
@@ -32,6 +32,13 @@ export default function ProductsPanel({ categories, products, onChanged }: Produ
       <div className="space-y-2">
         {products.map((p) => (
           <div key={p.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+            <div className="h-12 w-12 rounded-lg bg-slate-50 overflow-hidden shrink-0 flex items-center justify-center">
+              {p.product_images && p.product_images.length > 0 ? (
+                <img src={[...p.product_images].sort((a, b) => a.sort_order - b.sort_order)[0].image_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <Tag size={16} className="text-slate-300" />
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-semibold text-slate-800 truncate">{p.name}</p>
@@ -86,13 +93,13 @@ export default function ProductsPanel({ categories, products, onChanged }: Produ
       )}
 
       {previewProduct && (
-        <PreviewModal product={previewProduct} catName={catName(previewProduct.category_id)} onClose={() => setPreviewProduct(null)} />
+        <PreviewModal product={previewProduct} images={previewProduct.product_images || []} catName={catName(previewProduct.category_id)} onClose={() => setPreviewProduct(null)} />
       )}
     </div>
   );
 }
 
-function ProductForm({ product, categories, onClose, onSaved }: { product: Product | null; categories: Category[]; onClose: () => void; onSaved: () => void }) {
+function ProductForm({ product, categories, onClose, onSaved }: { product: ProductWithImages | null; categories: Category[]; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(product?.name || '');
   const [code, setCode] = useState(product?.code || '');
   const [description, setDescription] = useState(product?.description || '');
@@ -104,10 +111,27 @@ function ProductForm({ product, categories, onClose, onSaved }: { product: Produ
   const [isDiscounted, setIsDiscounted] = useState(product?.is_discounted || false);
   const [inStock, setInStock] = useState(product?.in_stock ?? true);
   const [images, setImages] = useState<ProductImage[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [createdId, setCreatedId] = useState<string | null>(product?.id || null);
+
+  // Editing previously showed no images because the list view didn't carry them.
+  useEffect(() => {
+    if (!product?.id || product.product_images) {
+      if (product?.product_images) setImages([...product.product_images].sort((a, b) => a.sort_order - b.sort_order));
+      return;
+    }
+    let active = true;
+    setLoadingImages(true);
+    fetchProductById(product.id).then((full) => {
+      if (!active) return;
+      if (full?.product_images) setImages(full.product_images);
+      setLoadingImages(false);
+    });
+    return () => { active = false; };
+  }, [product?.id, product?.product_images]);
 
   const handleImages = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -225,6 +249,11 @@ function ProductForm({ product, categories, onClose, onSaved }: { product: Produ
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-1">تصاویر محصول</label>
             <div className="flex flex-wrap gap-2 mb-2">
+              {loadingImages && (
+                <div className="h-20 w-20 rounded-lg border border-slate-200 flex items-center justify-center">
+                  <Loader2 size={18} className="animate-spin text-navy-500" />
+                </div>
+              )}
               {images.map((img) => (
                 <div key={img.id} className="relative h-20 w-20 rounded-lg overflow-hidden border border-slate-200 group">
                   <img src={img.image_url} alt="" className="h-full w-full object-cover" />
@@ -278,7 +307,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-function PreviewModal({ product, catName, onClose }: { product: Product; catName: string; onClose: () => void }) {
+function PreviewModal({ product, images, catName, onClose }: { product: ProductWithImages; images: ProductImage[]; catName: string; onClose: () => void }) {
   const hasDiscount = product.discount_price != null && Number(product.discount_price) < Number(product.price);
   const price = hasDiscount ? Number(product.discount_price) : Number(product.price);
   return (
@@ -288,8 +317,12 @@ function PreviewModal({ product, catName, onClose }: { product: Product; catName
           <h3 className="font-bold text-navy-700">پیش‌نمایش محصول</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
         </div>
-        <div className="h-40 rounded-lg bg-slate-50 flex items-center justify-center mb-3">
-          <Tag size={40} className="text-slate-300" />
+        <div className="h-40 rounded-lg bg-slate-50 flex items-center justify-center mb-3 overflow-hidden">
+          {images.length > 0 ? (
+            <img src={[...images].sort((a, b) => a.sort_order - b.sort_order)[0].image_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <Tag size={40} className="text-slate-300" />
+          )}
         </div>
         <h4 className="font-semibold text-slate-800">{product.name}</h4>
         <p className="text-xs text-slate-400 mb-2">کود: {product.code} • {catName}</p>

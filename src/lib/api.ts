@@ -38,15 +38,6 @@ export async function fetchAnalyticsStats(): Promise<AnalyticsStats | null> {
 
 // ── Auth ──
 
-export async function getBootstrapEmail(): Promise<string | null> {
-  const { data } = await supabase
-    .from('admin_users')
-    .select('email')
-    .limit(1)
-    .maybeSingle();
-  return (data as { email: string } | null)?.email ?? null;
-}
-
 export async function signInAdmin(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) return { ok: false, error: error?.message || 'ورود ناموفق بود.' };
@@ -72,26 +63,17 @@ export async function currentAdminEmail(): Promise<string | null> {
 }
 
 /**
- * First-run bootstrap: if no admin account exists at all, the first person to
- * create one becomes the admin. Once admin_users has a row, this is denied.
+ * First-run setup: creates the account and claims admin status. The claim only
+ * succeeds while no admin exists AND the current store password is supplied.
  */
-export async function bootstrapAdmin(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
-  const { data: existing } = await supabase
-    .from('admin_users')
-    .select('user_id')
-    .limit(1)
-    .maybeSingle();
-  if (existing) return { ok: false, error: 'یک حساب مدیریت از قبل وجود دارد.' };
-
+export async function claimFirstAdmin(email: string, password: string, storePassword: string): Promise<{ ok: boolean; error?: string }> {
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error || !data.user) return { ok: false, error: error?.message || 'ایجاد حساب ناموفق بود.' };
 
-  const { error: insertError } = await supabase
-    .from('admin_users')
-    .insert({ user_id: data.user.id, email: email.trim().toLowerCase() });
-  if (insertError) {
+  const { data: claimed, error: rpcError } = await supabase.rpc('claim_admin_if_none', { store_password: storePassword });
+  if (rpcError || !claimed) {
     await supabase.auth.signOut();
-    return { ok: false, error: 'ثبت حساب مدیریتی ناموفق بود.' };
+    return { ok: false, error: 'راه‌اندازی ممکن نیست: یا قبلاً یک حساب مدیریتی ساخته شده، یا رمز فروشگاه اشتباه است.' };
   }
   return { ok: true };
 }
@@ -104,9 +86,8 @@ export async function changeAdminPassword(newPassword: string): Promise<{ ok: bo
 // ── Settings ──
 
 export async function fetchSettings(): Promise<Settings | null> {
-  // The secure `settings` table is admin-only; the app reads the public view.
-  // Admin fields (admin_password) are excluded; admin panel edits go through
-  // the settings table directly below.
+  // The secure `settings` table is admin-only; the public site reads the view
+  // which excludes the password record.
   const { data } = await supabase.from('public_settings').select('*').eq('id', 1).maybeSingle();
   return data as Settings | null;
 }
