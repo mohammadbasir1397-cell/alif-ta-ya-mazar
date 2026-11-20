@@ -38,19 +38,29 @@ export async function fetchAnalyticsStats(): Promise<AnalyticsStats | null> {
 
 // ── Auth ──
 
-export async function signInAdmin(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+// Username "admin" maps to the panel's admin mailbox; real emails pass through.
+const ADMIN_USERNAME_EMAIL = 'admin@aliftaya.local';
+
+function normalizeAdminIdentifier(raw: string): string {
+  const value = raw.trim().toLowerCase();
+  if (value === 'admin') return ADMIN_USERNAME_EMAIL;
+  return value;
+}
+
+export async function signInAdmin(identifier: string, password: string): Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean }> {
+  const email = normalizeAdminIdentifier(identifier);
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) return { ok: false, error: error?.message || 'ورود ناموفق بود.' };
   const { data: adminRow } = await supabase
     .from('admin_users')
-    .select('user_id')
+    .select('user_id, password_changed')
     .eq('user_id', data.user.id)
     .maybeSingle();
   if (!adminRow) {
     await supabase.auth.signOut();
     return { ok: false, error: 'این حساب دسترسی مدیریتی ندارد.' };
   }
-  return { ok: true };
+  return { ok: true, mustChangePassword: !(adminRow as { password_changed?: boolean }).password_changed };
 }
 
 export async function signOutAdmin(): Promise<void> {
@@ -66,7 +76,8 @@ export async function currentAdminEmail(): Promise<string | null> {
  * First-run setup: creates the account and claims admin status. The claim only
  * succeeds while no admin exists AND the current store password is supplied.
  */
-export async function claimFirstAdmin(email: string, password: string, storePassword: string): Promise<{ ok: boolean; error?: string }> {
+export async function claimFirstAdmin(identifier: string, password: string, storePassword: string): Promise<{ ok: boolean; error?: string; mustChangePassword?: boolean }> {
+  const email = normalizeAdminIdentifier(identifier);
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error || !data.user) return { ok: false, error: error?.message || 'ایجاد حساب ناموفق بود.' };
 
@@ -75,12 +86,17 @@ export async function claimFirstAdmin(email: string, password: string, storePass
     await supabase.auth.signOut();
     return { ok: false, error: 'راه‌اندازی ممکن نیست: یا قبلاً یک حساب مدیریتی ساخته شده، یا رمز فروشگاه اشتباه است.' };
   }
-  return { ok: true };
+  return { ok: true, mustChangePassword: true };
 }
 
 export async function changeAdminPassword(newPassword: string): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  if (error) return { ok: false, error: error.message };
+  const { data } = await supabase.auth.getUser();
+  if (data.user) {
+    await supabase.from('admin_users').update({ password_changed: true }).eq('user_id', data.user.id);
+  }
+  return { ok: true };
 }
 
 // ── Settings ──

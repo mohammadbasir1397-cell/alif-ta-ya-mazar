@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingCart, UserCog, Loader2,
 } from 'lucide-react';
 import type { Category, ProductWithImages, Settings as SettingsType } from '@/lib/types';
-import { fetchCategories, fetchProducts, fetchPrivateSettings, signOutAdmin } from '@/lib/api';
+import { fetchCategories, fetchProducts, fetchPrivateSettings, signOutAdmin, changeAdminPassword } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import AdminGate from './AdminGate';
 import DashboardPanel from './DashboardPanel';
@@ -30,6 +30,7 @@ export type { Tab };
 export default function AdminPage({ settings, navigate, initialTab }: AdminPageProps) {
   // null = session check in progress
   const [authed, setAuthed] = useState<boolean | null>(null);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [tab, setTab] = useState<Tab>(initialTab || 'dashboard');
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<ProductWithImages[]>([]);
@@ -62,7 +63,20 @@ export default function AdminPage({ settings, navigate, initialTab }: AdminPageP
   }
 
   if (!authed) {
-    return <AdminGate onSuccess={() => setAuthed(true)} />;
+    return <AdminGate onSuccess={(needsChange) => { setMustChangePassword(needsChange); setAuthed(true); }} />;
+  }
+
+  if (mustChangePassword) {
+    return (
+      <ForceChangePassword
+        onDone={() => setMustChangePassword(false)}
+        onSkip={async () => {
+          await signOutAdmin();
+          setMustChangePassword(false);
+          setAuthed(false);
+        }}
+      />
+    );
   }
 
   const logout = async () => {
@@ -133,6 +147,53 @@ export default function AdminPage({ settings, navigate, initialTab }: AdminPageP
             {tab === 'account' && <AccountPanel onSignedOut={() => setAuthed(false)} />}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ForceChangePassword({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setError('');
+    if (password.length < 6) {
+      setError('رمز عبور باید حداقل ۶ کاراکتر باشد.');
+      return;
+    }
+    if (password !== confirm) {
+      setError('رمز عبور و تکرار آن یکسان نیستند.');
+      return;
+    }
+    setBusy(true);
+    const result = await changeAdminPassword(password);
+    setBusy(false);
+    if (result.ok) {
+      onDone();
+    } else {
+      setError('تغییر رمز ناموفق بود. دوباره تلاش کنید.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm w-full max-w-md">
+        <h1 className="text-lg font-bold text-navy-700 mb-1">تغییر رمز عبور</h1>
+        <p className="text-sm text-slate-500 mb-4 leading-6">
+          شما با رمز موقت وارد شده‌اید. برای امنیت فروشگاه، ابتدا یک رمز عبور جدید و شخصی انتخاب کنید تا به پنل دسترسی پیدا کنید.
+        </p>
+        <div className="space-y-3">
+          <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }} placeholder="رمز عبور جدید (حداقل ۶ کاراکتر)" className="aty-input" dir="ltr" />
+          <input type="password" value={confirm} onChange={(e) => { setConfirm(e.target.value); setError(''); }} placeholder="تکرار رمز عبور جدید" className="aty-input" dir="ltr" />
+          {error && <p className="text-xs text-rose-600">{error}</p>}
+          <button onClick={submit} disabled={busy} className="w-full rounded-lg bg-navy-700 text-white py-2.5 text-sm font-bold hover:bg-navy-800 disabled:opacity-50 flex items-center justify-center gap-2">
+            {busy && <Loader2 size={16} className="animate-spin" />} ذخیره رمز جدید و ادامه
+          </button>
+          <button onClick={onSkip} className="w-full text-xs text-slate-400 hover:text-slate-600">انصراف و خروج</button>
+        </div>
       </div>
     </div>
   );

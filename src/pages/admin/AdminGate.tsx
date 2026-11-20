@@ -3,7 +3,7 @@ import { Lock, Mail, Loader2, ShieldCheck } from 'lucide-react';
 import { signInAdmin, claimFirstAdmin } from '@/lib/api';
 
 interface AdminGateProps {
-  onSuccess: () => void;
+  onSuccess: (mustChangePassword: boolean) => void;
 }
 
 export default function AdminGate({ onSuccess }: AdminGateProps) {
@@ -27,7 +27,7 @@ export default function AdminGate({ onSuccess }: AdminGateProps) {
       : await claimFirstAdmin(email.trim(), password, storePassword);
     setBusy(false);
     if (result.ok) {
-      onSuccess();
+      onSuccess(!!result.mustChangePassword);
     } else {
       setError(result.error || 'خطایی رخ داد. دوباره تلاش کنید.');
     }
@@ -67,10 +67,10 @@ export default function AdminGate({ onSuccess }: AdminGateProps) {
           <div className="relative">
             <Mail size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => { setEmail(e.target.value); setError(''); }}
-              placeholder="ایمیل مدیریت"
+              placeholder="ایمیل مدیریت یا نام کاربری (admin)"
               autoFocus
               className="aty-input pr-10"
               dir="ltr"
